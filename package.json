@@ -1,14 +1,24 @@
 {
   "name": "rest-api",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "For learning purpose.",
+  "main": "./src/bin/www.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gaurav0497/node-test-project.git"
+  },
+  "engines": {
+    "node": ">=12.8.3",
+    "npm": ">=6.14.6"
+  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "nodemon npx babel-node ./src/bin/www.js"
+    "start": "nodemon npx babel-node ./src/bin/www.js",
+    "production": "node ./dist/bin/www",
+    "build": "npx babel src -d dist"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": ["node-api","rest-api"],
+  "author": "Gaurav thakur <thakurgaurav497@gmail.com>",
   "license": "ISC",
   "dependencies": {
     "body-parser": "^1.20.1",
