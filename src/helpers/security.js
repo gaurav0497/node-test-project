@@ -27,7 +27,6 @@ const decryptData = function (encryptedData, key, cb) {
   try {
 
     const encKey = Crypto.createHash('sha256').update(key + STATIC_PEPPER + process.env.PASS_SALT_STATIC).digest();
-
     let iv = new Buffer(encryptedData.substring(0, 32), 'hex');
     let encrypted = new Buffer(encryptedData.substring(32), 'hex');
 

@@ -5,7 +5,7 @@ const sessionModel = require("../models/sessions")
 const mute = require("immutable");
 // Helpers
 
-const { validateEmail,generate_account_id,validatePassword,generatePassword,comparePassword,encryptData,generate_random_signature } = require("../helpers/security")
+const { validateEmail,generate_account_id,validatePassword,generatePassword,comparePassword,encryptData,generate_random_signature,decryptData } = require("../helpers/security")
 
 const responseStruct = mute.Map({
     signature: null,
@@ -410,7 +410,6 @@ const logout = function (data, response, cb) {
                     .toJS()
             );
         }
-    });
     return cb(
         null,
         responseStruct
@@ -423,5 +422,256 @@ const logout = function (data, response, cb) {
             })
             .toJS()
     );
+    })
 };
 exports.logout = logout;
+
+const validate_token_v2 = function (data, response, cb) {
+    if (!cb) {
+        cb = response;
+    }
+    let force_refresh = false;
+    if (!data.token || !data.account_id) {
+        return cb(
+            responseStruct
+                .merge({
+                    signature: data.req.signature,
+                    action: "validate_token_v2",
+                    status: 401,
+                    success: false,
+                    message: "Missing Credentials",
+                })
+                .toJS()
+        );
+    }
+    let payload = {
+        user: data.account_id,
+        token: data.token,
+    };
+    sessionModel.find(payload, function (err, response) {
+        if (err) {
+            return cb(
+                responseStruct
+                    .merge({
+                        signature: data.req.signature,
+                        action: "validate_token",
+                        status: 403,
+                        success: false,
+                        message: "sessions.readToken",
+                    })
+                    .toJS()
+            );
+        }
+        if (response.length <= 0) {
+            console.log("outside token");
+            return cb(
+                responseStruct
+                    .merge({
+                        signature: data.req.signature,
+                        action: "validate_token",
+                        status: 403,
+                        success: false,
+                        message: "sessions.readTokenv2",
+                    })
+                    .toJS()
+            );
+        }
+
+        userModel.find({account_id:payload.user}, function (err, res) {
+            if (err) {
+                return cb(
+                    responseStruct
+                        .merge({
+                            signature: data.req.signature,
+                            action: "validate_token_v2",
+                            status: 401,
+                            success: false,
+                            message: "Unauthorized",
+                        })
+                        .toJS()
+                );
+            }
+            decryptData(data.token, res[0]?.salt, function (err, decrypted_data) {
+                if (err) {
+                    console.log("error", err);
+                    return cb(
+                        responseStruct
+                            .merge({
+                                signature: data.req.signature,
+                                action: "validate_token_v2",
+                                status: 401,
+                                success: false,
+                                message: "Unauthorized",
+                            })
+                            .toJS()
+                    );
+                }
+                if ((Date.now() - decrypted_data.timestamp) / 1000 / 60 > parseInt(process.env.TOKEN_EXPIRY)) {
+                    // expire in db
+                    let exp_sess_data = {
+                        token: data.token,
+                    };
+                    sessionModel.findOneAndUpdate(exp_sess_data,{is_active:false,end_reason: "user_logged_out"}, function (err, res) {
+                        if (err) {
+                            return cb(
+                                responseStruct
+                                    .merge({
+                                        signature: data.req.signature,
+                                        action: "logout",
+                                        status: 500,
+                                        success: false,
+                                        message: "Something went wrong",
+                                    })
+                                    .toJS()
+                            );
+                        }
+                    return cb(
+                        null,
+                        responseStruct
+                            .merge({
+                                signature: data.req.signature,
+                                action: "logout",
+                                status: 204,
+                                success: true,
+                                message: "Succesfully logged out.",
+                            })
+                            .toJS()
+                    );
+                    })
+                    return cb(
+                        responseStruct
+                            .merge({
+                                signature: data.req.signature,
+                                action: "validate_token_v2",
+                                status: 401,
+                                success: false,
+                                message: "Token expired",
+                            })
+                            .toJS()
+                    );
+                }
+
+                // refresh token
+                if ((Date.now() - decrypted_data.timestamp) / 1000 / 60 > parseInt(process.env.TOKEN_EXPIRY) / 2) {
+                    force_refresh = true;
+                }
+                if (!decrypted_data.company_id && res[0].company_id) {
+                    force_refresh = true;
+                    decrypted_data.company_id = res[0].company_id;
+                    decrypted_data.timestamp = Date.now();
+                }
+                if (force_refresh) {
+                    encryptData({ ...decrypted_data, timestamp: Date.now() }, res[0].salt, function (err, refresh_token) {
+                        if (err) {
+                            console.log("unable to generate refresh token");
+                            console.log(err);
+                            console.log("not blocking the user");
+                        } else {
+                            refresh_session({ ...data, refresh_token: refresh_token }, console.log);
+
+                            return cb(
+                                null,
+                                responseStruct
+                                    .merge({
+                                        signature: data.req.signature,
+                                        action: "validate_token_v2",
+                                        status: 200,
+                                        success: true,
+                                        message: "ok",
+                                        data: {
+                                            ...decrypted_data,
+                                            refresh_token: refresh_token,
+                                        },
+                                    })
+                                    .toJS()
+                            );
+                        }
+                    });
+                } else {
+                    return cb(
+                        null,
+                        responseStruct
+                            .merge({
+                                signature: data.req.signature,
+                                action: "validate_token_v2",
+                                status: 200,
+                                success: true,
+                                message: "ok",
+                                data: decrypted_data,
+                            })
+                            .toJS()
+                    );
+                }
+            });
+        });
+    });
+};
+exports.validate_token_v2 = validate_token_v2;
+
+const refresh_session = function (data, response, cb) {
+    if (!cb) {
+        cb = response;
+    }
+    data.user = data.account_id;
+    sessionModel.find(data, function (err, current_sess) {
+        if (err) {
+            console.log("sessions.insert", err);
+            return cb(
+                responseStruct
+                    .merge({
+                        signature: data.req.signature,
+                        action: "sessions",
+                        status: 500,
+                        success: false,
+                        message: "Something went wrong!",
+                    })
+                    .toJS()
+            );
+        }
+        let user_ip = data.req.ip || data.req.request.ip;
+        let device_id = current_sess.device_id;
+        let device_session = current_sess.device_session;
+        let token_type = "auth";
+        let token = data.refresh_token;
+        let parent_token = data.token;
+        let id = data.user;
+        let signature = data.req.signature;
+        let device_info = "";
+
+        if (data.req.request) {
+            device_info = data.req.request.headers["user-agent"];
+        }
+
+        let sessionData = new sessionModel ({
+            user: id,
+            signature: signature,
+            parent_token: null,
+            token: token,
+            parent_token: parent_token,
+            token_type: token_type,
+            user_ip: user_ip,
+            browser: data.req.request.browser,
+            os: data.req.request.os,
+            device_id: device_id,
+            device_session: device_session,
+            device_info: device_info,
+            is_active: true,
+        });
+        sessionData.save().then().catch((err)=>{
+            if (err) {
+                console.log("sessions.insert", err);
+                return cb(
+                    responseStruct
+                        .merge({
+                            signature: data.req.signature,
+                            action: "sessions",
+                            status: 500,
+                            success: false,
+                            message: "Something went wrong!",
+                        })
+                        .toJS()
+                );
+            }
+        })
+    });
+};

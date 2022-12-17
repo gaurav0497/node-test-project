@@ -5,6 +5,7 @@ const router = express.Router();
 const userController = require("../controllers/users")
 
 /* Middlewares */
+const authenticator = require("../middlewares/authenticator")()
 const formatRequest = require("../middlewares/formatRequest");
 router.use(formatRequest);
 
@@ -39,7 +40,7 @@ router.post("/v1/user/login", (req, res, next) => {
     });
 });
 
-router.post("/v1/user/logout", (req, res, next) => {
+router.post("/v1/user/logout",authenticator, (req, res, next) => {
     let data = { ...req.params, ...req.body, ...req.query };
     data.req = req.data;
     userController.logout(data, (err, result) => {

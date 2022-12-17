@@ -1,6 +1,4 @@
 // import models
-const userModel = require("../models/users")
-const sessionModel = require("../models/sessions")
 const contactModel = require("../models/contacts")
 
 const mute = require("immutable");
@@ -60,29 +58,35 @@ const createBulk = function(data,response,cb){
     if(!cb){
         cb = response
     }
-    const data_to_save = new contactModel({
-        name:data.name,
-        email:data.email,
-        phone:data.phone,
-        relation:data.relation,
-        user_id:data.user_id,
+    let bulkData = []
+    data.bulkData.map((item)=>{
+        bulkData.push({
+            name:item.name,
+            email:item.email,
+            phone:item.phone,
+            relation:item.relation,
+            user_id:item.user_id,
+            created_at:new Date(),
+            updated_at:new Date(),
+            is_deleted:false
+        })
     })
-    data_to_save.save().then((_userData)=>{
+    contactModel.insertMany(bulkData).then((_userData)=>{
        return cb(null,responseStruct
         .merge({
-            
-            action: "create",
+            signature: data.req.signature,
+            action: "createBulk",
             status: 204,
             success: true,
-            message: "ok"
+            message: "success"
         }).toJS()
         );
     })
     .catch((err)=>{
         return cb(null,responseStruct
             .merge({
-                // 
-                action: "create",
+                signature: data.req.signature,
+                action: "createBulk",
                 status: 500,
                 success: false,
                 message: "something went wrong."+process.env.NODE_ENV=="development"?err:""
@@ -160,7 +164,7 @@ const deleteBulk = function(data,response,cb){
     if(!cb){
         cb = response
     }
-    contactModel.findByIdAndUpdate({user_id:data.id},{is_deleted:true,deleted_by:data.user_id||653412}).then((_userData)=>{
+    contactModel.updateMany({user_id:data.id},{is_deleted:false,deleted_by:null}).then((_userData)=>{
         return cb(null,responseStruct
          .merge({
              signature: data.req.signature,
@@ -174,7 +178,7 @@ const deleteBulk = function(data,response,cb){
     .catch((err)=>{
         return cb(null,responseStruct
             .merge({
-                // 
+                signature: data.req.signature,
                 action: "create",
                 status: 500,
                 success: false,
@@ -184,3 +188,37 @@ const deleteBulk = function(data,response,cb){
     })
 }
 exports.deleteBulk = deleteBulk
+
+const fetch = function(data,response,cb){
+    if(!cb){
+        cb = response
+    }
+    
+    contactModel.find({user_id:data.id},null,{sort:{created_at:-1}}).select(['name','email','phone','relation','created_at']).then((_userData)=>{
+       return cb(null,responseStruct
+        .merge({
+            signature: data.req.signature,
+            action: "fetch",
+            status: 200,
+            success: true,
+            message: "sucess",
+            data:_userData,
+            metadata:{
+                total:_userData.length
+            }
+        }).toJS()
+        );
+    })
+    .catch((err)=>{
+        return cb(null,responseStruct
+            .merge({
+                signature: data.req.signature,
+                action: "fetch",
+                status: 500,
+                success: false,
+                message: "something went wrong."+process.env.NODE_ENV=="development"?err:""
+            }).toJS()
+        );
+    })
+}
+exports.fetch = fetch;
