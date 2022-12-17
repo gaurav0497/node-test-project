@@ -13,6 +13,8 @@ let schema = new Schema({
   email:String,
   phone:String,
   user_id:String,
+  relation:String,
+  is_deleted:Boolean,
   deleted_by: Number,
   created_at: Date,
   updated_at: String,

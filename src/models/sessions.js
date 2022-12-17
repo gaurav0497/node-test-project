@@ -9,12 +9,20 @@ const collection_name = "sessions"
 // create a schema
 let schema = new Schema({
   uuid: String,
-  account_id:Number,
+  user:Number,
   token:String,
   is_active:{
     type:Boolean,
     default:true,
   },
+  token_type: String,
+  user_ip: String,
+  browser: String,
+  os: String,
+  device_id: String,
+  device_session: String,
+  device_info: String,
+  end_reason: String,
   deleted_by: Number,
   created_at: Date,
   updated_at: String,

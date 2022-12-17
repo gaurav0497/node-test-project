@@ -6,6 +6,8 @@ const helmet = require('helmet');
 
 // Routes import
 const index = require('./routes/index');
+const userRoute = require('./routes/users');
+const contactRoute = require('./routes/contacts');
 
 
 let app = express();
@@ -25,6 +27,10 @@ app.use(function(req, res, next) {
 
 // Healthcheck
 app.use('/', index);
+
+// routes
+app.use('/users',userRoute);
+app.use('/contacts',contactRoute)
 
 
 // catch 404 and forward to error handler
